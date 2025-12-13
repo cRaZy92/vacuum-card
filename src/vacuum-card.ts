@@ -217,12 +217,18 @@ export class VacuumCard extends LitElement {
   }
 
   private renderBattery(): Template {
-    const { battery_level, battery_icon } = this.getAttributes(this.entity);
+    const { battery, battery_level, battery_icon } = this.getAttributes(
+      this.entity,
+    );
+
+    if (!battery_level && !battery) {
+      return nothing;
+    }
 
     return html`
       <div class="tip" @click="${() => this.handleMore()}">
         <ha-icon icon="${battery_icon}"></ha-icon>
-        <span class="icon-title">${battery_level}%</span>
+        <span class="icon-title">${battery_level ?? battery}%</span>
       </div>
     `;
   }
@@ -331,7 +337,8 @@ export class VacuumCard extends LitElement {
         <ha-circular-progress
           .indeterminate=${this?.requestInProgress}
           size="small"
-          style="display: ${this?.requestInProgress ? 'flex' : 'none'}">
+          style="display: ${this?.requestInProgress ? 'flex' : 'none'}"
+        >
         </ha-circular-progress>
       </div>
     `;

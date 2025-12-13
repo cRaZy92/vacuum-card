@@ -26,6 +26,7 @@ export interface VacuumEntityAttributes extends HassEntityAttributeBase {
   fan_speed?: string;
   fan_speed_list?: string[];
   battery_level?: number;
+  battery?: number; // unique to dreame vacuum
   battery_icon?: string;
 }
 
