@@ -6,7 +6,7 @@ import {
   fireEvent,
 } from 'custom-card-helpers';
 import localize from './localize';
-import { customElement, property, state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { Template, VacuumCardConfig } from './types';
 import styles from './editor.css';
 
@@ -14,179 +14,137 @@ type ConfigElement = HTMLInputElement & {
   configValue?: keyof VacuumCardConfig;
 };
 
-@customElement('vacuum-card-editor')
 export class VacuumCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false }) public hass?: HomeAssistant;
 
   @state() private config!: Partial<VacuumCardConfig>;
 
-  @state() private image? = undefined;
-  @state() private compact_view = false;
-  @state() private show_name = true;
-  @state() private show_status = true;
-  @state() private show_toolbar = true;
-
   setConfig(config: LovelaceCardConfig & VacuumCardConfig): void {
     this.config = config;
 
-    if (!this.config.entity) {
-      this.config.entity = this.getEntitiesByType('vacuum')[0] || '';
+    if (!this.config.entity && this.hass) {
+      this.config.entity =
+        Object.keys(this.hass.states).find((id) => id.startsWith('vacuum')) ||
+        '';
       fireEvent(this, 'config-changed', { config: this.config });
     }
   }
 
-  private getEntitiesByType(type: string): string[] {
-    if (!this.hass) {
-      return [];
-    }
-    return Object.keys(this.hass.states).filter((id) => id.startsWith(type));
-  }
-
   protected render(): Template {
-    if (!this.hass) {
+    if (!this.hass || !this.config) {
       return nothing;
     }
-
-    const vacuumEntities = this.getEntitiesByType('vacuum');
-    const batteryEntities = this.getEntitiesByType('sensor');
-    const cameraEntities = [
-      ...this.getEntitiesByType('camera'),
-      ...this.getEntitiesByType('image'),
-    ];
 
     return html`
       <div class="card-config">
         <div class="option">
-          <ha-select
-            .label=${localize('editor.entity')}
-            @selected=${this.valueChanged}
-            .configValue=${'entity'}
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ entity: { domain: 'vacuum' } }}
             .value=${this.config.entity}
-            @closed=${(e: Event) => e.stopPropagation()}
-            fixedMenuPosition
-            naturalMenuWidth
-            required
-            validationMessage=${localize('error.missing_entity')}
-          >
-            ${vacuumEntities.map(
-              (entity) =>
-                html` <mwc-list-item .value=${entity}
-                  >${entity}</mwc-list-item
-                >`,
-            )}
-          </ha-select>
+            .label=${localize('editor.entity')}
+            .required=${true}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'entity')}
+          ></ha-selector>
         </div>
 
         <div class="option">
-          <ha-select
-            .label=${localize('editor.battery_entity')}
-            @selected=${this.valueChanged}
-            .configValue=${'battery_entity'}
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ entity: { domain: 'sensor' } }}
             .value=${this.config.battery_entity}
-            @closed=${(e: Event) => e.stopPropagation()}
-            fixedMenuPosition
-            naturalMenuWidth
-          >
-            ${batteryEntities.map(
-              (entity) =>
-                html` <mwc-list-item .value=${entity}
-                  >${entity}</mwc-list-item
-                >`,
-            )}
-          </ha-select>
+            .label=${localize('editor.battery_entity')}
+            .required=${false}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'battery_entity')}
+          ></ha-selector>
         </div>
 
         <div class="option">
-          <ha-select
-            .label=${localize('editor.map')}
-            @selected=${this.valueChanged}
-            .configValue=${'map'}
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ entity: { domain: ['camera', 'image'] } }}
             .value=${this.config.map}
-            @closed=${(e: Event) => e.stopPropagation()}
-            fixedMenuPosition
-            naturalMenuWidth
-          >
-            ${cameraEntities.map(
-              (entity) =>
-                html` <mwc-list-item .value=${entity}
-                  >${entity}</mwc-list-item
-                >`,
-            )}
-          </ha-select>
+            .label=${localize('editor.map')}
+            .required=${false}
+            @value-changed=${(e: CustomEvent) => this.selectorChanged(e, 'map')}
+          ></ha-selector>
         </div>
 
         <div class="option">
           <paper-input
             label="${localize('editor.image')}"
-            .value=${this.image}
+            .value=${this.config.image}
             .configValue=${'image'}
             @value-changed=${this.valueChanged}
           ></paper-input>
         </div>
 
         <div class="option">
-          <ha-switch
-            aria-label=${localize(
-              this.compact_view
-                ? 'editor.compact_view_aria_label_off'
-                : 'editor.compact_view_aria_label_on',
-            )}
-            .checked=${Boolean(this.compact_view)}
-            .configValue=${'compact_view'}
-            @change=${this.valueChanged}
-          >
-          </ha-switch>
-          ${localize('editor.compact_view')}
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ boolean: {} }}
+            .value=${this.config.compact_view ?? false}
+            .label=${localize('editor.compact_view')}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'compact_view')}
+          ></ha-selector>
         </div>
 
         <div class="option">
-          <ha-switch
-            aria-label=${localize(
-              this.show_name
-                ? 'editor.show_name_aria_label_off'
-                : 'editor.show_name_aria_label_on',
-            )}
-            .checked=${Boolean(this.show_name)}
-            .configValue=${'show_name'}
-            @change=${this.valueChanged}
-          >
-          </ha-switch>
-          ${localize('editor.show_name')}
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ boolean: {} }}
+            .value=${this.config.show_name ?? true}
+            .label=${localize('editor.show_name')}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'show_name')}
+          ></ha-selector>
         </div>
 
         <div class="option">
-          <ha-switch
-            aria-label=${localize(
-              this.show_status
-                ? 'editor.show_status_aria_label_off'
-                : 'editor.show_status_aria_label_on',
-            )}
-            .checked=${Boolean(this.show_status)}
-            .configValue=${'show_status'}
-            @change=${this.valueChanged}
-          >
-          </ha-switch>
-          ${localize('editor.show_status')}
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ boolean: {} }}
+            .value=${this.config.show_status ?? true}
+            .label=${localize('editor.show_status')}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'show_status')}
+          ></ha-selector>
         </div>
 
         <div class="option">
-          <ha-switch
-            aria-label=${localize(
-              this.show_toolbar
-                ? 'editor.show_toolbar_aria_label_off'
-                : 'editor.show_toolbar_aria_label_on',
-            )}
-            .checked=${Boolean(this.show_toolbar)}
-            .configValue=${'show_toolbar'}
-            @change=${this.valueChanged}
-          >
-          </ha-switch>
-          ${localize('editor.show_toolbar')}
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ boolean: {} }}
+            .value=${this.config.show_toolbar ?? true}
+            .label=${localize('editor.show_toolbar')}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'show_toolbar')}
+          ></ha-selector>
         </div>
 
         <strong>${localize('editor.code_only_note')}</strong>
       </div>
     `;
+  }
+
+  private selectorChanged(
+    event: CustomEvent,
+    configKey: keyof VacuumCardConfig,
+  ): void {
+    const value = event.detail?.value ?? '';
+    if (this.config[configKey] === value) {
+      return;
+    }
+    if (value === '') {
+      const { [configKey]: _, ...rest } = this.config;
+      this.config = rest;
+    } else {
+      this.config = { ...this.config, [configKey]: value };
+    }
+    fireEvent(this, 'config-changed', { config: this.config });
   }
 
   private valueChanged(event: Event): void {
@@ -217,4 +175,12 @@ export class VacuumCardEditor extends LitElement implements LovelaceCardEditor {
   static get styles() {
     return styles;
   }
+}
+
+try {
+  customElements.define('vacuum-card-editor', VacuumCardEditor);
+} catch (e) {
+  console.warn(
+    'vacuum-card-editor is already registered. Reload the page to use the latest version.',
+  );
 }

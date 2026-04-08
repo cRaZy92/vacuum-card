@@ -21,7 +21,7 @@ const IS_DEV = process.env.ROLLUP_WATCH;
 
 const serverOptions = {
   contentBase: ['./dist'],
-  host: 'localhost',
+  host: '0.0.0.0',
   port: 5000,
   allowCrossOrigin: true,
   headers: {

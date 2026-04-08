@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import type { CSSResultGroup, PropertyValues } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import {
   hasConfigOrEntityChanged,
@@ -46,7 +46,6 @@ if (!customElements.get('ha-icon-button')) {
   );
 }
 
-@customElement('vacuum-card')
 export class VacuumCard extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
@@ -597,6 +596,14 @@ declare global {
   interface Window {
     customCards?: unknown[];
   }
+}
+
+try {
+  customElements.define('vacuum-card', VacuumCard);
+} catch (e) {
+  console.warn(
+    'vacuum-card is already registered. Reload the page to use the latest version.',
+  );
 }
 
 window.customCards = window.customCards || [];
