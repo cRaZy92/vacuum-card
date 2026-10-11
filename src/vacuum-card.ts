@@ -25,6 +25,9 @@ import {
   VacuumEntityState,
   VacuumServiceCallParams,
   VacuumActionParams,
+  VacuumArea,
+  VacuumAreaSection,
+  VacuumFloor,
 } from './types';
 import DEFAULT_IMAGE from './vacuum.svg';
 
@@ -32,6 +35,9 @@ registerTemplates();
 
 // String in the right side will be replaced by Rollup
 const PKG_VERSION = 'PKG_VERSION_VALUE';
+
+// VacuumEntityFeature.CLEAN_AREA in Home Assistant
+const FEATURE_CLEAN_AREA = 16384;
 
 console.info(
   `%c VACUUM-CARD %c ${PKG_VERSION}`,
@@ -52,6 +58,10 @@ export class VacuumCard extends LitElement {
   @state() private config!: VacuumCardConfig;
   @state() private requestInProgress = false;
   @state() private thumbUpdater: ReturnType<typeof setInterval> | null = null;
+  @state() private mappedAreaIds: string[] = [];
+  @state() private selectedAreaIds: string[] = [];
+  @state() private areasExpanded = false;
+  private areasLoadedFor: string | null = null;
 
   static get styles(): CSSResultGroup {
     return styles;
@@ -91,6 +101,8 @@ export class VacuumCard extends LitElement {
 
   public setConfig(config: VacuumCardConfig): void {
     this.config = buildConfig(config);
+    this.areasExpanded = this.config.expand_areas;
+    this.areasLoadedFor = null;
   }
 
   public getCardSize(): number {
@@ -107,6 +119,106 @@ export class VacuumCard extends LitElement {
       changedProps.get('hass').states[this.config.entity].state !==
         this.hass.states[this.config.entity].state
     ) {
+      this.requestInProgress = false;
+    }
+
+    if (this.hass && this.areasLoadedFor !== this.config.entity) {
+      this.loadAreas();
+    }
+  }
+
+  get supportsCleanArea(): boolean {
+    const features = this.entity?.attributes.supported_features ?? 0;
+    return (features & FEATURE_CLEAN_AREA) !== 0;
+  }
+
+  // Areas the vacuum's segments are mapped to in Home Assistant, grouped by floor
+  get areaSections(): VacuumAreaSection[] {
+    const hass = this.hass as HomeAssistant & {
+      areas?: Record<string, VacuumArea>;
+      floors?: Record<string, VacuumFloor>;
+    };
+    const mapped = new Set(this.mappedAreaIds);
+    const areas = Object.values(hass.areas ?? {}).filter((area) =>
+      mapped.has(area.area_id),
+    );
+    const floors = Object.values(hass.floors ?? {});
+    const floorIds = new Set(floors.map((floor) => floor.floor_id));
+
+    const sections: VacuumAreaSection[] = floors.map((floor) => ({
+      floor,
+      areas: areas.filter((area) => area.floor_id === floor.floor_id),
+    }));
+    sections.push({
+      floor: null,
+      areas: areas.filter(
+        (area) => !area.floor_id || !floorIds.has(area.floor_id),
+      ),
+    });
+
+    return sections.filter((section) => section.areas.length > 0);
+  }
+
+  private async loadAreas(): Promise<void> {
+    const entityId = this.config.entity;
+    this.areasLoadedFor = entityId;
+
+    if (!this.config.show_areas || !this.supportsCleanArea) {
+      this.mappedAreaIds = [];
+      return;
+    }
+
+    try {
+      const entry = await this.hass.callWS<{
+        options?: { vacuum?: { area_mapping?: Record<string, unknown> } };
+      }>({
+        type: 'config/entity_registry/get',
+        entity_id: entityId,
+      });
+
+      if (this.config.entity !== entityId) {
+        return;
+      }
+
+      this.mappedAreaIds = Object.keys(
+        entry?.options?.vacuum?.area_mapping ?? {},
+      );
+      this.selectedAreaIds = this.selectedAreaIds.filter((id) =>
+        this.mappedAreaIds.includes(id),
+      );
+    } catch (err) {
+      console.warn('vacuum-card: failed to load vacuum areas', err);
+      this.mappedAreaIds = [];
+    }
+  }
+
+  private toggleAreas(): void {
+    this.areasExpanded = !this.areasExpanded;
+    if (this.areasExpanded) {
+      this.loadAreas();
+    }
+  }
+
+  private toggleArea(areaId: string): void {
+    this.selectedAreaIds = this.selectedAreaIds.includes(areaId)
+      ? this.selectedAreaIds.filter((id) => id !== areaId)
+      : [...this.selectedAreaIds, areaId];
+  }
+
+  private async handleStart(): Promise<void> {
+    if (this.selectedAreaIds.length === 0) {
+      return this.handleVacuumAction('start')();
+    }
+
+    this.requestInProgress = true;
+    try {
+      await this.hass.callService('vacuum', 'clean_area', {
+        entity_id: this.config.entity,
+        cleaning_area_id: this.selectedAreaIds,
+      });
+      this.selectedAreaIds = [];
+    } catch {
+      // Home Assistant reports the failed action; keep the selection for a retry
       this.requestInProgress = false;
     }
   }
@@ -544,12 +656,31 @@ export class VacuumCard extends LitElement {
           </ha-icon-button>
         `;
 
+        const selectedCount = this.selectedAreaIds.length;
+        const areasButton =
+          this.mappedAreaIds.length > 0
+            ? html`
+                <ha-icon-button
+                  class="areas-toggle ${this.areasExpanded ? 'active' : ''}"
+                  label="${localize('common.clean_areas')}"
+                  @click="${() => this.toggleAreas()}"
+                  ><ha-icon icon="mdi:texture-box"></ha-icon>
+                </ha-icon-button>
+              `
+            : nothing;
+
         return html`
           <div class="toolbar">
             <ha-icon-button
+              class="start"
               label="${localize('common.start')}"
-              @click="${this.handleVacuumAction('start')}"
+              @click="${() => this.handleStart()}"
               ><ha-icon icon="hass:play"></ha-icon>
+              ${
+                selectedCount > 0
+                  ? html`<span class="badge">${selectedCount}</span>`
+                  : nothing
+              }
             </ha-icon-button>
 
             <ha-icon-button
@@ -558,13 +689,71 @@ export class VacuumCard extends LitElement {
               ><ha-icon icon="mdi:map-marker"></ha-icon>
             </ha-icon-button>
 
-            ${state === 'idle' ? dockButton : ''}
+            ${state === 'idle' ? dockButton : ''} ${areasButton}
             <div class="fill-gap"></div>
             ${buttons}
           </div>
         `;
       }
     }
+  }
+
+  private renderAreas(state: VacuumEntityState): Template {
+    if (
+      !this.config.show_toolbar ||
+      !this.areasExpanded ||
+      !['docked', 'idle'].includes(state)
+    ) {
+      return nothing;
+    }
+
+    const sections = this.areaSections;
+    if (sections.length === 0) {
+      return nothing;
+    }
+
+    const showLabels = sections.length > 1;
+
+    return html`
+      <div class="areas">
+        ${sections.map(
+          ({ floor, areas }) => html`
+            ${
+              showLabels
+                ? html`
+                    <div class="areas-floor">
+                      <ha-icon
+                        icon="${floor?.icon || 'mdi:floor-plan'}"
+                      ></ha-icon>
+                      ${floor?.name ?? localize('common.other_areas')}
+                    </div>
+                  `
+                : nothing
+            }
+            <div class="areas-list">
+              ${areas.map((area) => {
+                const index = this.selectedAreaIds.indexOf(area.area_id);
+                return html`
+                  <button
+                    class="area ${index >= 0 ? 'selected' : ''}"
+                    aria-pressed="${index >= 0}"
+                    @click="${() => this.toggleArea(area.area_id)}"
+                  >
+                    <ha-icon icon="${area.icon || 'mdi:texture-box'}"></ha-icon>
+                    <span class="area-name">${area.name}</span>
+                    ${
+                      index >= 0
+                        ? html`<span class="badge">${index + 1}</span>`
+                        : nothing
+                    }
+                  </button>
+                `;
+              })}
+            </div>
+          `,
+        )}
+      </div>
+    `;
   }
 
   private renderUnavailable(): Template {
@@ -612,6 +801,7 @@ export class VacuumCard extends LitElement {
           ${this.renderStats(this.entity.state)}
         </div>
 
+        ${this.renderAreas(this.entity.state)}
         ${this.renderToolbar(this.entity.state)}
       </ha-card>
     `;

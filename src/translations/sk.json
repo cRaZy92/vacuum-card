@@ -50,6 +50,8 @@
     "stop": "Zastaviť",
     "return_to_base": "Domov",
     "locate": "Lokalizovať vysávač",
+    "clean_areas": "Vyčistiť miestnosti",
+    "other_areas": "Ostatné miestnosti",
     "not_available": "Vysávač je nedostupný"
   },
   "error": {

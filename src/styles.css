@@ -310,3 +310,94 @@ ha-icon {
   color: var(--vc-toolbar-icon-color);
   display: flex;
 }
+
+.toolbar ha-icon-button.start {
+  position: relative;
+}
+
+.toolbar ha-icon-button.start .badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+}
+
+.toolbar ha-icon-button.areas-toggle.active ha-icon {
+  color: var(--primary-color);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--primary-color);
+  color: var(--text-primary-color, #fff);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.areas {
+  border-top: 1px solid var(--vc-divider-color);
+  padding: var(--vc-spacing);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.areas-floor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vc-secondary-text-color);
+  font-size: 13px;
+  font-weight: 500;
+
+  & ha-icon {
+    --mdc-icon-size: 18px;
+  }
+}
+
+.areas-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.area {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--vc-divider-color);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--vc-primary-text-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  & ha-icon {
+    --mdc-icon-size: 18px;
+    display: flex;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+
+  &.selected {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+
+    & ha-icon {
+      color: var(--primary-color);
+    }
+  }
+}

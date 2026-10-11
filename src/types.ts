@@ -27,6 +27,7 @@ export interface VacuumEntityAttributes extends HassEntityAttributeBase {
   fan_speed_list?: string[];
   battery_level?: number;
   battery_icon?: string;
+  supported_features?: number;
 }
 
 export interface VacuumEntity extends HassEntityBase {
@@ -36,6 +37,24 @@ export interface VacuumEntity extends HassEntityBase {
 
 export interface VacuumBatteryEntity extends HassEntityBase {
   attributes: HassEntityAttributeBase;
+}
+
+export interface VacuumArea {
+  area_id: string;
+  name: string;
+  icon?: string | null;
+  floor_id?: string | null;
+}
+
+export interface VacuumFloor {
+  floor_id: string;
+  name: string;
+  icon?: string | null;
+}
+
+export interface VacuumAreaSection {
+  floor: VacuumFloor | null;
+  areas: VacuumArea[];
 }
 
 export interface VacuumCardStat {
@@ -69,6 +88,8 @@ export interface VacuumCardConfig {
   show_name: boolean;
   show_status: boolean;
   show_toolbar: boolean;
+  show_areas: boolean;
+  expand_areas: boolean;
   compact_view: boolean;
   stats: Record<string, VacuumCardStat[]>;
   actions: Record<string, VacuumCardAction>;
