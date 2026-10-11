@@ -28,6 +28,7 @@ import {
   VacuumActionParams,
   VacuumArea,
   VacuumAreaSection,
+  VacuumSegment,
   VacuumFloor,
 } from './types';
 import DEFAULT_IMAGE from './vacuum.svg';
@@ -62,6 +63,8 @@ export class VacuumCard extends LitElement {
   @state() private thumbUpdater: ReturnType<typeof setInterval> | null = null;
   @state() private mappedAreaIds: string[] = [];
   @state() private selectedAreaIds: string[] = [];
+  // Vacuum segment name → id of the area it is mapped to in Home Assistant
+  @state() private segmentAreaIds: Record<string, string> = {};
   @state() private areasExpanded = false;
   private areasLoadedFor: string | null = null;
 
@@ -180,33 +183,67 @@ export class VacuumCard extends LitElement {
     const entityId = this.config.entity;
     this.areasLoadedFor = entityId;
 
-    if (!this.config.show_areas || !this.supportsCleanArea) {
+    if (!this.supportsCleanArea) {
       this.mappedAreaIds = [];
+      this.segmentAreaIds = {};
       return;
     }
 
     try {
-      const entry = await this.hass.callWS<{
-        options?: { vacuum?: { area_mapping?: Record<string, unknown> } };
-      }>({
-        type: 'config/entity_registry/get',
-        entity_id: entityId,
-      });
+      const [entry, { segments }] = await Promise.all([
+        this.hass.callWS<{
+          options?: { vacuum?: { area_mapping?: Record<string, string[]> } };
+        }>({
+          type: 'config/entity_registry/get',
+          entity_id: entityId,
+        }),
+        // Segment names are only needed for display, keep the picker working
+        this.hass
+          .callWS<{ segments: VacuumSegment[] }>({
+            type: 'vacuum/get_segments',
+            entity_id: entityId,
+          })
+          .catch(() => ({ segments: [] as VacuumSegment[] })),
+      ]);
 
       if (this.config.entity !== entityId) {
         return;
       }
 
-      this.mappedAreaIds = Object.keys(
-        entry?.options?.vacuum?.area_mapping ?? {},
-      );
+      const mapping = entry?.options?.vacuum?.area_mapping ?? {};
+      const segmentAreaIds: Record<string, string> = {};
+      for (const [areaId, segmentIds] of Object.entries(mapping)) {
+        for (const segment of segments) {
+          if (segmentIds.includes(segment.id)) {
+            segmentAreaIds[segment.name] ??= areaId;
+          }
+        }
+      }
+
+      this.segmentAreaIds = segmentAreaIds;
+      this.mappedAreaIds = this.config.show_areas ? Object.keys(mapping) : [];
       this.selectedAreaIds = this.selectedAreaIds.filter((id) =>
         this.mappedAreaIds.includes(id),
       );
     } catch (err) {
       console.warn('vacuum-card: failed to load vacuum areas', err);
       this.mappedAreaIds = [];
+      this.segmentAreaIds = {};
     }
+  }
+
+  // Vacuum integrations report rooms by their own segment names; show the
+  // name of the Home Assistant area the segment is mapped to instead
+  private areaNameForSegment(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const hass = this.hass as HomeAssistant & {
+      areas?: Record<string, VacuumArea>;
+    };
+
+    return hass.areas?.[this.segmentAreaIds[value]]?.name;
   }
 
   get visibleOptions(): VacuumCardOption[] {
@@ -565,6 +602,8 @@ export class VacuumCard extends LitElement {
         } else {
           return nothing;
         }
+
+        state = this.areaNameForSegment(state) ?? state;
 
         const value = html`
           <ha-template

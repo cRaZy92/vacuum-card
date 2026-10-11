@@ -52,6 +52,12 @@ export interface VacuumFloor {
   icon?: string | null;
 }
 
+export interface VacuumSegment {
+  id: string;
+  name: string;
+  group?: string | null;
+}
+
 export interface VacuumAreaSection {
   floor: VacuumFloor | null;
   areas: VacuumArea[];
