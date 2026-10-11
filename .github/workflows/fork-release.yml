@@ -1,0 +1,48 @@
+name: Fork Release
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout Repo
+        uses: actions/checkout@v7
+
+      - name: ⬢ Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: latest
+          cache: npm
+
+      - name: 📦 Install Packages
+        run: npm ci
+
+      - name: 🧮 Set version
+        id: version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")-fork.${{ github.run_number }}"
+          npm version --no-git-tag-version "$VERSION"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: 🏗 Build
+        run: npm run build
+
+      - name: 🚀 Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: dist/vacuum-card.js
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
