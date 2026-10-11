@@ -857,13 +857,14 @@ export class VacuumCard extends LitElement {
                     aria-pressed="${index >= 0}"
                     @click="${() => this.toggleArea(area.area_id)}"
                   >
-                    <ha-icon icon="${area.icon || 'mdi:texture-box'}"></ha-icon>
-                    <span class="area-name">${area.name}</span>
                     ${
                       index >= 0
                         ? html`<span class="badge">${index + 1}</span>`
-                        : nothing
+                        : html`<ha-icon
+                            icon="${area.icon || 'mdi:texture-box'}"
+                          ></ha-icon>`
                     }
+                    <span class="area-name">${area.name}</span>
                   </button>
                 `;
               })}
