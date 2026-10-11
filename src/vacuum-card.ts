@@ -31,6 +31,7 @@ import {
   VacuumFloor,
 } from './types';
 import DEFAULT_IMAGE from './vacuum.svg';
+import './vacuum-animation';
 
 registerTemplates();
 
@@ -519,6 +520,16 @@ export class VacuumCard extends LitElement {
             />
           `
         : nothing;
+    }
+
+    if (this.config.image === 'animated') {
+      return html`
+        <vacuum-card-animation
+          class="vacuum-animation"
+          .stateObj=${this.entity}
+          @click="${() => this.handleMore()}"
+        ></vacuum-card-animation>
+      `;
     }
 
     const src =

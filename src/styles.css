@@ -449,3 +449,7 @@ ha-icon {
     outline-offset: 2px;
   }
 }
+
+.vacuum-animation {
+  margin: var(--vc-spacing) auto;
+}
