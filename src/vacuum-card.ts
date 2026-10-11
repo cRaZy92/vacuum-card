@@ -245,6 +245,28 @@ export class VacuumCard extends LitElement {
     };
   }
 
+  // Falls back to translations shipped by the vacuum integration itself
+  private formatStatus(entity: VacuumEntity): string | undefined {
+    const hass = this.hass as HomeAssistant & {
+      formatEntityState?: (stateObj: HassEntity) => string;
+      formatEntityAttributeValue?: (
+        stateObj: HassEntity,
+        attribute: string,
+      ) => string;
+    };
+    const { status, state } = entity.attributes;
+
+    if (status != null) {
+      return hass.formatEntityAttributeValue?.(entity, 'status');
+    }
+
+    if (state != null) {
+      return hass.formatEntityAttributeValue?.(entity, 'state');
+    }
+
+    return hass.formatEntityState?.(entity);
+  }
+
   private renderSource(): Template {
     const { fan_speed: source, fan_speed_list: sources } = this.getAttributes(
       this.entity,
@@ -405,7 +427,9 @@ export class VacuumCard extends LitElement {
   private renderStatus(): Template {
     const { status } = this.getAttributes(this.entity);
     const localizedStatus =
-      localize(`status.${status.toLowerCase()}`) || status;
+      localize(`status.${status.toLowerCase()}`) ||
+      this.formatStatus(this.entity) ||
+      status;
 
     if (!this.config.show_status) {
       return nothing;
