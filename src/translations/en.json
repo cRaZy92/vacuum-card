@@ -51,6 +51,7 @@
     "return_to_base": "Dock",
     "locate": "Locate Vacuum",
     "clean_areas": "Clean areas",
+    "cleaning_options": "Cleaning options",
     "other_areas": "Other areas",
     "not_available": "Vacuum is not available"
   },

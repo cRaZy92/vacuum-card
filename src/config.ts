@@ -32,5 +32,6 @@ export default function buildConfig(
     stats: config.stats ?? {},
     actions: config.actions ?? {},
     shortcuts: config.shortcuts ?? [],
+    options: config.options ?? [],
   };
 }

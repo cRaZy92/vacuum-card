@@ -123,6 +123,7 @@ Here is what every option means:
 | `stats`          | `object`  | Optional     | Custom per state stats for your vacuum cleaner                                                                |
 | `actions`        | `object`  | Optional     | Override default actions behavior with service invocations.                                                   |
 | `shortcuts`      |  `array`  | Optional     | List of shortcuts shown at the right bottom part of the card with custom actions for your vacuum cleaner.     |
+| `options`        |  `array`  | Optional     | List of `select` entities (cleaning mode, map, etc.) shown as dropdowns in the room picker panel.             |
 
 ### `stats` object
 
@@ -156,6 +157,27 @@ You can defined [custom scripts][ha-scripts] for custom actions i.e cleaning spe
 | `target`       | `object` | Optional | A `HassServiceTarget`, to define a target for the current service call. |
 | `icon`         | `string` | Optional | Any icon for action button.                                             |
 | `service_data` | `object` | Optional | `service_data` for `service` call                                       |
+
+### `options` object
+
+Add `select` (or `input_select`) entities that control how the vacuum cleans, i.e. cleaning mode or selected map. They are shown as dropdowns above the room picker, so you can set up a cleaning without leaving the card. Unavailable entities are hidden.
+
+| Name           |   Type   | Default     | Description                                                              |
+| -------------- | :------: | ----------- | ------------------------------------------------------------------------ |
+| `entity`       | `string` | Required    | A `select` or `input_select` entity, i.e. `select.vacuum_cleaning_mode`. |
+| `name`         | `string` | Entity name | Label shown next to the dropdown.                                        |
+| `visible_when` | `object` | Optional    | Show the option only when another entity matches, see below.             |
+
+`visible_when` takes an `entity` and either `state` or `state_not` (a string or a list of strings). Quote values like `'off'`, otherwise YAML reads them as booleans.
+
+```yaml
+options:
+  - entity: select.vacuum_cleangenius
+  - entity: select.vacuum_cleaning_mode
+    visible_when:
+      entity: select.vacuum_cleangenius
+      state: 'off'
+```
 
 ## Theming
 

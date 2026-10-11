@@ -401,3 +401,48 @@ ha-icon {
     }
   }
 }
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--vc-spacing);
+  min-height: 32px;
+}
+
+.option-name {
+  color: var(--vc-secondary-text-color);
+  font-size: 13px;
+  text-align: left;
+}
+
+.option-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--vc-divider-color);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--vc-primary-text-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+
+  & ha-icon {
+    --mdc-icon-size: 18px;
+    display: flex;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+}

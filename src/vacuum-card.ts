@@ -18,6 +18,7 @@ import buildConfig from './config';
 import {
   Template,
   VacuumCardAction,
+  VacuumCardOption,
   VacuumCardConfig,
   VacuumEntity,
   HassEntity,
@@ -110,7 +111,22 @@ export class VacuumCard extends LitElement {
   }
 
   public shouldUpdate(changedProps: PropertyValues): boolean {
-    return hasConfigOrEntityChanged(this, changedProps, false);
+    if (hasConfigOrEntityChanged(this, changedProps, false)) {
+      return true;
+    }
+
+    // Options are separate entities, so the vacuum entity check misses them
+    const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
+    return (
+      !!oldHass &&
+      this.config.options
+        .flatMap(({ entity, visible_when }) => [entity, visible_when?.entity])
+        .some(
+          (entityId) =>
+            !!entityId &&
+            oldHass.states[entityId] !== this.hass.states[entityId],
+        )
+    );
   }
 
   protected updated(changedProps: PropertyValues) {
@@ -190,6 +206,45 @@ export class VacuumCard extends LitElement {
       console.warn('vacuum-card: failed to load vacuum areas', err);
       this.mappedAreaIds = [];
     }
+  }
+
+  get visibleOptions(): VacuumCardOption[] {
+    const matches = (expected: string | string[], state?: string) =>
+      state !== undefined && [expected].flat().map(String).includes(state);
+
+    return this.config.options.filter(({ entity, visible_when }) => {
+      const stateObj = this.hass.states[entity];
+      if (!stateObj || stateObj.state === 'unavailable') {
+        return false;
+      }
+      if (!visible_when) {
+        return true;
+      }
+
+      const state = this.hass.states[visible_when.entity]?.state;
+      return (
+        (visible_when.state === undefined ||
+          matches(visible_when.state, state)) &&
+        (visible_when.state_not === undefined ||
+          !matches(visible_when.state_not, state))
+      );
+    });
+  }
+
+  private handleOption(
+    entityId: string,
+    e: CustomEvent<{ item?: { value?: string } }>,
+  ): void {
+    const option = e.detail.item?.value;
+    if (option === undefined) {
+      return;
+    }
+
+    const [domain] = entityId.split('.');
+    this.hass.callService(domain, 'select_option', {
+      entity_id: entityId,
+      option,
+    });
   }
 
   private toggleAreas(): void {
@@ -657,14 +712,20 @@ export class VacuumCard extends LitElement {
         `;
 
         const selectedCount = this.selectedAreaIds.length;
+        const hasOptions = this.visibleOptions.length > 0;
+        const hasAreas = this.mappedAreaIds.length > 0;
         const areasButton =
-          this.mappedAreaIds.length > 0
+          hasOptions || hasAreas
             ? html`
                 <ha-icon-button
                   class="areas-toggle ${this.areasExpanded ? 'active' : ''}"
-                  label="${localize('common.clean_areas')}"
+                  label="${localize(
+                    hasAreas ? 'common.clean_areas' : 'common.cleaning_options',
+                  )}"
                   @click="${() => this.toggleAreas()}"
-                  ><ha-icon icon="mdi:texture-box"></ha-icon>
+                  ><ha-icon
+                    icon="${hasAreas ? 'mdi:texture-box' : 'mdi:tune'}"
+                  ></ha-icon>
                 </ha-icon-button>
               `
             : nothing;
@@ -698,6 +759,53 @@ export class VacuumCard extends LitElement {
     }
   }
 
+  private renderOption({ entity, name }: VacuumCardOption): Template {
+    const hass = this.hass as HomeAssistant & {
+      formatEntityState?: (stateObj: HassEntity, state?: string) => string;
+      formatEntityName?: (
+        stateObj: HassEntity,
+        type: { type: string },
+      ) => string | undefined;
+    };
+    const stateObj = hass.states[entity];
+    const choices: string[] = stateObj.attributes.options ?? [];
+    const formatChoice = (choice: string) =>
+      hass.formatEntityState?.(stateObj, choice) ?? choice;
+    const label =
+      name ||
+      hass.formatEntityName?.(stateObj, { type: 'entity' }) ||
+      stateObj.attributes.friendly_name ||
+      entity;
+
+    return html`
+      <div class="option">
+        <span class="option-name">${label}</span>
+        <ha-dropdown
+          placement="bottom-end"
+          @wa-select=${(e: CustomEvent<{ item?: { value?: string } }>) =>
+            this.handleOption(entity, e)}
+        >
+          <button class="option-trigger" slot="trigger" aria-label=${label}>
+            <span>${formatChoice(stateObj.state)}</span>
+            <ha-icon icon="mdi:menu-down"></ha-icon>
+          </button>
+          ${repeat(
+            choices,
+            (choice) => choice,
+            (choice) => html`
+              <ha-dropdown-item
+                .value=${choice}
+                ?checked=${choice === stateObj.state}
+              >
+                ${formatChoice(choice)}
+              </ha-dropdown-item>
+            `,
+          )}
+        </ha-dropdown>
+      </div>
+    `;
+  }
+
   private renderAreas(state: VacuumEntityState): Template {
     if (
       !this.config.show_toolbar ||
@@ -707,8 +815,9 @@ export class VacuumCard extends LitElement {
       return nothing;
     }
 
+    const options = this.visibleOptions;
     const sections = this.areaSections;
-    if (sections.length === 0) {
+    if (options.length === 0 && sections.length === 0) {
       return nothing;
     }
 
@@ -716,6 +825,15 @@ export class VacuumCard extends LitElement {
 
     return html`
       <div class="areas">
+        ${
+          options.length > 0
+            ? html`
+                <div class="options">
+                  ${options.map((option) => this.renderOption(option))}
+                </div>
+              `
+            : nothing
+        }
         ${sections.map(
           ({ floor, areas }) => html`
             ${
