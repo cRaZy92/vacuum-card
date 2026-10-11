@@ -413,9 +413,11 @@ export class VacuumCard extends LitElement {
 
     return html`
       <div class="status">
-        ${this.requestInProgress
-          ? html`<ha-spinner class="status-spinner" size="tiny"></ha-spinner>`
-          : nothing}
+        ${
+          this.requestInProgress
+            ? html`<ha-spinner class="status-spinner" size="tiny"></ha-spinner>`
+            : nothing
+        }
         <span class="status-text" alt=${localizedStatus}>
           ${localizedStatus}
         </span>
@@ -600,7 +602,7 @@ declare global {
 
 try {
   customElements.define('vacuum-card', VacuumCard);
-} catch (e) {
+} catch {
   console.warn(
     'vacuum-card is already registered. Reload the page to use the latest version.',
   );

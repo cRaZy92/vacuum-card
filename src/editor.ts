@@ -139,7 +139,8 @@ export class VacuumCardEditor extends LitElement implements LovelaceCardEditor {
       return;
     }
     if (value === '') {
-      const { [configKey]: _, ...rest } = this.config;
+      const rest = { ...this.config };
+      delete rest[configKey];
       this.config = rest;
     } else {
       this.config = { ...this.config, [configKey]: value };
@@ -179,7 +180,7 @@ export class VacuumCardEditor extends LitElement implements LovelaceCardEditor {
 
 try {
   customElements.define('vacuum-card-editor', VacuumCardEditor);
-} catch (e) {
+} catch {
   console.warn(
     'vacuum-card-editor is already registered. Reload the page to use the latest version.',
   );
