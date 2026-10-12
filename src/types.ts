@@ -102,6 +102,8 @@ export interface VacuumCardConfig {
   battery_entity: string;
   map: string;
   map_refresh: number;
+  map_entity: string;
+  map_areas: Record<string, string[]>;
   image: string;
   show_name: boolean;
   show_status: boolean;

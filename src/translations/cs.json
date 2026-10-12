@@ -66,6 +66,7 @@
     "entity": "Entita (Povinný)",
     "battery_entity": "Entita baterie (Volitelné)",
     "map": "Mapa (Nepovinný)",
+    "map_entity": "Entita vybrané mapy (Nepovinný)",
     "image": "Fotka (Nepovinný)",
     "compact_view": "Kompaktní zobrazení",
     "compact_view_aria_label_on": "Zapni kompaktní zobrazení",

@@ -113,6 +113,8 @@ Here is what every option means:
 | `battery_entity` | `string`  | Optional     | An entity_id within the `sensor` domain to display battery state and icon.                                                                       |
 | `map`            | `string`  | Optional     | An entity_id within the `camera` domain, for streaming live vacuum map.                                                                          |
 | `map_refresh`    | `integer` | `5`          | Update interval for map camera in seconds                                                                                                        |
+| `map_entity`     | `string`  | Optional     | A `select` entity holding the vacuum's selected map. The room picker then shows only the rooms of that map, see [rooms per map](#rooms-per-map). |
+| `map_areas`      | `object`  | Optional     | Rooms to show for each map, when they can't be detected automatically.                                                                           |
 | `image`          | `string`  | `default`    | Path to image of your vacuum cleaner. Better to have `png` or `svg`. Use `animated` for the animated vacuum from Home Assistant's vacuum dialog. |
 | `show_name`      | `boolean` | `true`       | Show friendly name of the vacuum.                                                                                                                |
 | `show_status`    | `boolean` | `true`       | Show status of the vacuum.                                                                                                                       |
@@ -178,6 +180,25 @@ options:
       entity: select.vacuum_cleangenius
       state: 'off'
 ```
+
+### Rooms per map
+
+If your vacuum stores several maps, set `map_entity` to the `select` entity that switches between them. The room picker then shows only the rooms of the selected map, and rooms picked on another map are deselected when the map changes.
+
+Rooms are paired with maps automatically when the vacuum integration reports which map each room belongs to. If it doesn't, or the map names don't match the options of `map_entity`, all rooms stay visible. In that case list the Home Assistant area IDs for each map in `map_areas`, keyed by the option of `map_entity`:
+
+```yaml
+map_entity: select.vacuum_selected_map
+map_areas:
+  Ground floor:
+    - kitchen
+    - living_room
+  First floor:
+    - bedroom
+    - bathroom
+```
+
+Maps without an entry in `map_areas` keep using automatic detection.
 
 ## Theming
 

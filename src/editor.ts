@@ -73,6 +73,18 @@ export class VacuumCardEditor extends LitElement implements LovelaceCardEditor {
         </div>
 
         <div class="option">
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ entity: { domain: ['select', 'input_select'] } }}
+            .value=${this.config.map_entity}
+            .label=${localize('editor.map_entity')}
+            .required=${false}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'map_entity')}
+          ></ha-selector>
+        </div>
+
+        <div class="option">
           <paper-input
             label="${localize('editor.image')}"
             .value=${this.config.image}

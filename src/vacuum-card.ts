@@ -65,6 +65,10 @@ export class VacuumCard extends LitElement {
   @state() private selectedAreaIds: string[] = [];
   // Vacuum segment name → id of the area it is mapped to in Home Assistant
   @state() private segmentAreaIds: Record<string, string> = {};
+  // Area id → names of the vacuum maps its segments belong to
+  @state() private areaMaps: Record<string, string[]> = {};
+  // Names of all maps the vacuum reports segments for
+  @state() private mapNames: string[] = [];
   @state() private areasExpanded = false;
   private areasLoadedFor: string | null = null;
 
@@ -119,18 +123,32 @@ export class VacuumCard extends LitElement {
       return true;
     }
 
-    // Options are separate entities, so the vacuum entity check misses them
+    // Options and the map are separate entities, so the vacuum entity check
+    // misses them
     const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
     return (
       !!oldHass &&
-      this.config.options
-        .flatMap(({ entity, visible_when }) => [entity, visible_when?.entity])
-        .some(
-          (entityId) =>
-            !!entityId &&
-            oldHass.states[entityId] !== this.hass.states[entityId],
-        )
+      [
+        this.config.map_entity,
+        ...this.config.options.flatMap(({ entity, visible_when }) => [
+          entity,
+          visible_when?.entity,
+        ]),
+      ].some(
+        (entityId) =>
+          !!entityId && oldHass.states[entityId] !== this.hass.states[entityId],
+      )
     );
+  }
+
+  protected willUpdate(): void {
+    // Rooms of another map can't be cleaned, drop them when the map changes
+    const visible = this.visibleAreaIds;
+    if (this.selectedAreaIds.some((id) => !visible.includes(id))) {
+      this.selectedAreaIds = this.selectedAreaIds.filter((id) =>
+        visible.includes(id),
+      );
+    }
   }
 
   protected updated(changedProps: PropertyValues) {
@@ -142,7 +160,18 @@ export class VacuumCard extends LitElement {
       this.requestInProgress = false;
     }
 
-    if (this.hass && this.areasLoadedFor !== this.config.entity) {
+    // Some integrations only report the segments of the active map
+    const mapEntity = this.config.map_entity;
+    const mapChanged =
+      !!mapEntity &&
+      !!changedProps.get('hass') &&
+      changedProps.get('hass').states[mapEntity]?.state !==
+        this.hass.states[mapEntity]?.state;
+
+    if (
+      this.hass &&
+      (this.areasLoadedFor !== this.config.entity || mapChanged)
+    ) {
       this.loadAreas();
     }
   }
@@ -152,13 +181,31 @@ export class VacuumCard extends LitElement {
     return (features & FEATURE_CLEAN_AREA) !== 0;
   }
 
+  // Mapped areas of the active map; all of them when the map can't be matched
+  get visibleAreaIds(): string[] {
+    const { map_entity, map_areas } = this.config;
+    const map = map_entity ? this.hass?.states[map_entity]?.state : undefined;
+    if (map === undefined) {
+      return this.mappedAreaIds;
+    }
+
+    const configured = map_areas[map];
+    if (configured) {
+      return this.mappedAreaIds.filter((id) => configured.includes(id));
+    }
+
+    return this.mapNames.includes(map)
+      ? this.mappedAreaIds.filter((id) => this.areaMaps[id]?.includes(map))
+      : this.mappedAreaIds;
+  }
+
   // Areas the vacuum's segments are mapped to in Home Assistant, grouped by floor
   get areaSections(): VacuumAreaSection[] {
     const hass = this.hass as HomeAssistant & {
       areas?: Record<string, VacuumArea>;
       floors?: Record<string, VacuumFloor>;
     };
-    const mapped = new Set(this.mappedAreaIds);
+    const mapped = new Set(this.visibleAreaIds);
     const areas = Object.values(hass.areas ?? {}).filter((area) =>
       mapped.has(area.area_id),
     );
@@ -186,6 +233,8 @@ export class VacuumCard extends LitElement {
     if (!this.supportsCleanArea) {
       this.mappedAreaIds = [];
       this.segmentAreaIds = {};
+      this.areaMaps = {};
+      this.mapNames = [];
       return;
     }
 
@@ -197,7 +246,7 @@ export class VacuumCard extends LitElement {
           type: 'config/entity_registry/get',
           entity_id: entityId,
         }),
-        // Segment names are only needed for display, keep the picker working
+        // Segments only refine the picker, keep it working without them
         this.hass
           .callWS<{ segments: VacuumSegment[] }>({
             type: 'vacuum/get_segments',
@@ -212,15 +261,21 @@ export class VacuumCard extends LitElement {
 
       const mapping = entry?.options?.vacuum?.area_mapping ?? {};
       const segmentAreaIds: Record<string, string> = {};
+      const areaMaps: Record<string, string[]> = {};
       for (const [areaId, segmentIds] of Object.entries(mapping)) {
         for (const segment of segments) {
           if (segmentIds.includes(segment.id)) {
             segmentAreaIds[segment.name] ??= areaId;
+            if (segment.group) {
+              (areaMaps[areaId] ??= []).push(segment.group);
+            }
           }
         }
       }
 
       this.segmentAreaIds = segmentAreaIds;
+      this.areaMaps = areaMaps;
+      this.mapNames = segments.flatMap(({ group }) => (group ? [group] : []));
       this.mappedAreaIds = this.config.show_areas ? Object.keys(mapping) : [];
       this.selectedAreaIds = this.selectedAreaIds.filter((id) =>
         this.mappedAreaIds.includes(id),
@@ -229,6 +284,8 @@ export class VacuumCard extends LitElement {
       console.warn('vacuum-card: failed to load vacuum areas', err);
       this.mappedAreaIds = [];
       this.segmentAreaIds = {};
+      this.areaMaps = {};
+      this.mapNames = [];
     }
   }
 
@@ -763,7 +820,7 @@ export class VacuumCard extends LitElement {
 
         const selectedCount = this.selectedAreaIds.length;
         const hasOptions = this.visibleOptions.length > 0;
-        const hasAreas = this.mappedAreaIds.length > 0;
+        const hasAreas = this.visibleAreaIds.length > 0;
         const areasButton =
           hasOptions || hasAreas
             ? html`

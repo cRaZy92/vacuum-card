@@ -66,6 +66,7 @@
     "entity": "Entita (povinné)",
     "battery_entity": "Stav batérie (voliteľné)",
     "map": "Mapa (voliteľné)",
+    "map_entity": "Entita vybranej mapy (voliteľné)",
     "image": "Obrázok (voliteľné)",
     "compact_view": "Kompaktné zobrazenie",
     "compact_view_aria_label_on": "Kompaktné zobrazenie zapnuté",

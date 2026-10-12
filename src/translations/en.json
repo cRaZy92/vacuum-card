@@ -66,6 +66,7 @@
     "entity": "Entity (Required)",
     "battery_entity": "Battery Entity (Optional)",
     "map": "Map Camera (Optional)",
+    "map_entity": "Selected Map Entity (Optional)",
     "image": "Image (Optional)",
     "compact_view": "Compact View",
     "compact_view_aria_label_on": "Toggle compact view on",
