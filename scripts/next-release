@@ -1,0 +1,110 @@
+#!/usr/bin/env node
+
+import { execFileSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
+import process from 'node:process';
+
+const BUMPS = ['patch', 'minor', 'major'];
+
+// Commit types that ship a change to the card. Anything else that follows the
+// conventional format (docs, ci, chore, test, ...) does not trigger a release.
+const SECTIONS = {
+  breaking: '❗️ Breaking Changes',
+  feat: '🚀 Features',
+  fix: '🐛 Bug Fixes',
+  other: '🧰 Other Changes',
+};
+const PATCH_TYPES = ['fix', 'perf', 'refactor', 'revert'];
+const CONVENTIONAL = /^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/;
+
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+
+const readCommits = (range) =>
+  git('log', '--no-merges', '--format=%h%x1f%s%x1f%b%x1e', range)
+    .split('\x1e')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [hash, subject, body = ''] = entry.split('\x1f');
+      return { hash, subject, body };
+    });
+
+const classify = ({ hash, subject, body }) => {
+  const match = subject.match(CONVENTIONAL);
+
+  // Free-form subjects still change the code, so release them as a patch.
+  if (!match) {
+    return { section: 'other', bump: 'patch', line: `- ${subject} (${hash})` };
+  }
+
+  const [, type, scope, bang, description] = match;
+  const line = `- ${scope ? `**${scope}:** ` : ''}${description} (${hash})`;
+
+  if (bang || /^BREAKING[ -]CHANGE:/m.test(body)) {
+    return { section: 'breaking', bump: 'major', line };
+  }
+  if (type === 'feat') return { section: 'feat', bump: 'minor', line };
+  if (type === 'fix') return { section: 'fix', bump: 'patch', line };
+  if (PATCH_TYPES.includes(type)) {
+    return { section: 'other', bump: 'patch', line };
+  }
+  return null;
+};
+
+const nextVersion = (tag, bump) => {
+  const [major, minor, patch] = tag.replace(/^v/, '').split('.').map(Number);
+  if (bump === 'major') return `${major + 1}.0.0`;
+  if (bump === 'minor') return `${major}.${minor + 1}.0`;
+  return `${major}.${minor}.${patch + 1}`;
+};
+
+const main = () => {
+  // Latest stable tag in history; pre-release style tags (v1.2.3-foo) are skipped.
+  const lastTag = git(
+    'describe',
+    '--tags',
+    '--abbrev=0',
+    '--match',
+    'v[0-9]*.[0-9]*.[0-9]*',
+    '--exclude',
+    '*-*',
+  );
+
+  const changes = readCommits(`${lastTag}..HEAD`).map(classify).filter(Boolean);
+
+  if (changes.length === 0) {
+    console.error(`No releasable changes since ${lastTag}.`);
+    return;
+  }
+
+  const bump = BUMPS[Math.max(...changes.map((c) => BUMPS.indexOf(c.bump)))];
+  const version = nextVersion(lastTag, bump);
+  const tag = `v${version}`;
+
+  const notes = Object.entries(SECTIONS)
+    .map(([section, title]) => {
+      const lines = changes.filter((c) => c.section === section);
+      if (lines.length === 0) return null;
+      return `## ${title}\n\n${lines.map((c) => c.line).join('\n')}`;
+    })
+    .filter(Boolean);
+
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (repository) {
+    notes.push(
+      `**Full Changelog**: https://github.com/${repository}/compare/${lastTag}...${tag}`,
+    );
+  }
+
+  console.error(`${lastTag} -> ${tag} (${bump})`);
+  console.log(notes.join('\n\n'));
+
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `tag=${tag}\nversion=${version}\n`,
+    );
+  }
+};
+
+main();
