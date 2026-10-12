@@ -39,6 +39,9 @@ registerTemplates();
 // String in the right side will be replaced by Rollup
 const PKG_VERSION = 'PKG_VERSION_VALUE';
 
+// How long an option waits for its entity to confirm a change
+const OPTION_TIMEOUT = 15000;
+
 // VacuumEntityFeature.CLEAN_AREA in Home Assistant
 const FEATURE_CLEAN_AREA = 16384;
 
@@ -69,6 +72,11 @@ export class VacuumCard extends LitElement {
   @state() private areaMaps: Record<string, string[]> = {};
   // Names of all maps the vacuum reports segments for
   @state() private mapNames: string[] = [];
+  // Option entity id → change that its entity has not confirmed yet
+  @state() private pendingOptions: Record<
+    string,
+    { from: string; to: string }
+  > = {};
   @state() private areasExpanded = false;
   private areasLoadedFor: string | null = null;
 
@@ -142,6 +150,15 @@ export class VacuumCard extends LitElement {
   }
 
   protected willUpdate(): void {
+    const settled = Object.entries(this.pendingOptions).filter(
+      ([entityId, { from }]) => this.hass?.states[entityId]?.state !== from,
+    );
+    if (settled.length > 0) {
+      const pending = { ...this.pendingOptions };
+      settled.forEach(([entityId]) => delete pending[entityId]);
+      this.pendingOptions = pending;
+    }
+
     // Rooms of another map can't be cleaned, drop them when the map changes
     const visible = this.visibleAreaIds;
     if (this.selectedAreaIds.some((id) => !visible.includes(id))) {
@@ -331,15 +348,36 @@ export class VacuumCard extends LitElement {
     e: CustomEvent<{ item?: { value?: string } }>,
   ): void {
     const option = e.detail.item?.value;
-    if (option === undefined) {
+    const from = this.hass.states[entityId]?.state;
+    if (
+      option === undefined ||
+      option === from ||
+      this.pendingOptions[entityId]
+    ) {
       return;
     }
 
+    // A second change sent before the first one lands gets overridden by it,
+    // so the option stays locked until its entity reports a new state
+    const pending = { from, to: option };
+    const release = () => {
+      if (this.pendingOptions[entityId] === pending) {
+        const rest = { ...this.pendingOptions };
+        delete rest[entityId];
+        this.pendingOptions = rest;
+      }
+    };
+    this.pendingOptions = { ...this.pendingOptions, [entityId]: pending };
+    setTimeout(release, OPTION_TIMEOUT);
+
     const [domain] = entityId.split('.');
-    this.hass.callService(domain, 'select_option', {
-      entity_id: entityId,
-      option,
-    });
+    this.hass
+      .callService(domain, 'select_option', {
+        entity_id: entityId,
+        option,
+      })
+      // Home Assistant reports the failed action
+      .catch(release);
   }
 
   private toggleAreas(): void {
@@ -875,6 +913,7 @@ export class VacuumCard extends LitElement {
       ) => string | undefined;
     };
     const stateObj = hass.states[entity];
+    const pending = this.pendingOptions[entity];
     const choices: string[] = stateObj.attributes.options ?? [];
     const formatChoice = (choice: string) =>
       hass.formatEntityState?.(stateObj, choice) ?? choice;
@@ -892,9 +931,19 @@ export class VacuumCard extends LitElement {
           @wa-select=${(e: CustomEvent<{ item?: { value?: string } }>) =>
             this.handleOption(entity, e)}
         >
-          <button class="option-trigger" slot="trigger" aria-label=${label}>
-            <span>${formatChoice(stateObj.state)}</span>
-            <ha-icon icon="mdi:menu-down"></ha-icon>
+          <button
+            class="option-trigger"
+            slot="trigger"
+            aria-label=${label}
+            aria-busy=${pending ? 'true' : 'false'}
+            ?disabled=${!!pending}
+          >
+            <span>${formatChoice(pending?.to ?? stateObj.state)}</span>
+            ${
+              pending
+                ? html`<ha-spinner size="tiny"></ha-spinner>`
+                : html`<ha-icon icon="mdi:menu-down"></ha-icon>`
+            }
           </button>
           ${repeat(
             choices,

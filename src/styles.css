@@ -444,6 +444,16 @@ ha-icon {
     display: flex;
   }
 
+  & ha-spinner {
+    --ha-spinner-color: var(--vc-secondary-text-color);
+    margin: 1px 4px 1px 6px;
+  }
+
+  &:disabled {
+    color: var(--vc-secondary-text-color);
+    cursor: progress;
+  }
+
   &:focus-visible {
     outline: 2px solid var(--primary-color);
     outline-offset: 2px;
