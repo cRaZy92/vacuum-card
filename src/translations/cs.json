@@ -80,6 +80,9 @@
     "show_toolbar": "Zobraz lištu",
     "show_toolbar_aria_label_on": "Zapni zobrazení lišty",
     "show_toolbar_aria_label_off": "Vypni zobrazení lišty",
+    "show_areas": "Zobrazení výběru místností",
+    "expand_areas": "Rozbalený výběr místností",
+    "animated_image": "Animovaný obrázek vysavače",
     "code_only_note": "Poznámka: Nastavení akcí a infa je dostupné pouze v editoru kódu."
   }
 }

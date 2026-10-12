@@ -80,6 +80,9 @@
     "show_toolbar": "Show Toolbar",
     "show_toolbar_aria_label_on": "Toggle display toolbar on",
     "show_toolbar_aria_label_off": "Toggle display toolbar off",
+    "show_areas": "Show Room Picker",
+    "expand_areas": "Expand Room Picker",
+    "animated_image": "Animated Vacuum Image",
     "code_only_note": "Note: Setting actions and stats options are available exclusively using Code Editor."
   }
 }

@@ -97,6 +97,20 @@ export interface VacuumCardOption {
   visible_when?: VacuumCardOptionCondition;
 }
 
+export interface VacuumCardAreaPreset {
+  name: string;
+  icon?: string;
+  areas: string[];
+}
+
+// Rooms sent to the vacuum by this card, kept to show them during the run
+export interface VacuumCleaningRun {
+  areas: string[];
+  started: number;
+  active: boolean;
+  idleSince?: number;
+}
+
 export interface VacuumCardConfig {
   entity: string;
   battery_entity: string;
@@ -115,6 +129,7 @@ export interface VacuumCardConfig {
   actions: Record<string, VacuumCardAction>;
   shortcuts: VacuumCardShortcut[];
   options: VacuumCardOption[];
+  area_presets: VacuumCardAreaPreset[];
 }
 
 export interface VacuumServiceCallParams {

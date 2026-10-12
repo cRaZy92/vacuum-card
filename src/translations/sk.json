@@ -80,6 +80,9 @@
     "show_toolbar": "Zobrazenie panela",
     "show_toolbar_aria_label_on": "Zobrazenie panela zapnuté",
     "show_toolbar_aria_label_off": "Zobrazenie panela vypnuté",
+    "show_areas": "Zobrazenie výberu miestností",
+    "expand_areas": "Rozbalený výber miestností",
+    "animated_image": "Animovaný obrázok vysávača",
     "code_only_note": "Poznámka: Nastavenie stavov a akcií je dostupné len pomocou editora kódu."
   }
 }

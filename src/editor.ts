@@ -137,6 +137,38 @@ export class VacuumCardEditor extends LitElement implements LovelaceCardEditor {
           ></ha-selector>
         </div>
 
+        <div class="option">
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ boolean: {} }}
+            .value=${this.config.show_areas ?? true}
+            .label=${localize('editor.show_areas')}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'show_areas')}
+          ></ha-selector>
+        </div>
+
+        <div class="option">
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ boolean: {} }}
+            .value=${this.config.expand_areas ?? false}
+            .label=${localize('editor.expand_areas')}
+            @value-changed=${(e: CustomEvent) =>
+              this.selectorChanged(e, 'expand_areas')}
+          ></ha-selector>
+        </div>
+
+        <div class="option">
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ boolean: {} }}
+            .value=${this.config.image === 'animated'}
+            .label=${localize('editor.animated_image')}
+            @value-changed=${this.animatedChanged}
+          ></ha-selector>
+        </div>
+
         <strong>${localize('editor.code_only_note')}</strong>
       </div>
     `;
@@ -157,6 +189,19 @@ export class VacuumCardEditor extends LitElement implements LovelaceCardEditor {
     } else {
       this.config = { ...this.config, [configKey]: value };
     }
+    fireEvent(this, 'config-changed', { config: this.config });
+  }
+
+  // The animated vacuum is a reserved value of the image option
+  private animatedChanged(event: CustomEvent): void {
+    const animated = !!event.detail?.value;
+    if (animated === (this.config.image === 'animated')) {
+      return;
+    }
+
+    const rest = { ...this.config };
+    delete rest.image;
+    this.config = animated ? { ...rest, image: 'animated' } : rest;
     fireEvent(this, 'config-changed', { config: this.config });
   }
 

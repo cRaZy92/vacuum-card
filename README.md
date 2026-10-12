@@ -126,6 +126,7 @@ Here is what every option means:
 | `actions`        | `object`  | Optional     | Override default actions behavior with service invocations.                                                                                      |
 | `shortcuts`      |  `array`  | Optional     | List of shortcuts shown at the right bottom part of the card with custom actions for your vacuum cleaner.                                        |
 | `options`        |  `array`  | Optional     | List of `select` entities (cleaning mode, map, etc.) shown as dropdowns in the room picker panel.                                                |
+| `area_presets`   |  `array`  | Optional     | Named room selections shown as chips above the room picker, see [`area_presets` object](#area_presets-object).                                   |
 
 ### `stats` object
 
@@ -180,6 +181,27 @@ options:
       entity: select.vacuum_cleangenius
       state: 'off'
 ```
+
+### `area_presets` object
+
+Save room selections you clean often as presets. Each preset is shown as a chip above the rooms: tap it to select exactly those rooms, tap it again to clear the selection. Tapping a floor name selects or deselects all rooms of that floor.
+
+| Name    |   Type   | Default  | Description                                                                                       |
+| ------- | :------: | -------- | ------------------------------------------------------------------------------------------------- |
+| `name`  | `string` | Required | Label of the preset chip.                                                                         |
+| `areas` | `array`  | Required | Home Assistant areas to select, by area ID or area name. Rooms that can't be cleaned are skipped. |
+| `icon`  | `string` | Optional | Icon of the preset chip.                                                                          |
+
+```yaml
+area_presets:
+  - name: Daily
+    icon: mdi:calendar-today
+    areas:
+      - Kitchen
+      - Hallway
+```
+
+While a cleaning started from the room picker is in progress, the card shows the rooms it was sent to. This is remembered per browser, so cleanings started elsewhere are not shown.
 
 ### Rooms per map
 

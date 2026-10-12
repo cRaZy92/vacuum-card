@@ -350,10 +350,21 @@ ha-icon {
 .areas-floor {
   display: flex;
   align-items: center;
+  align-self: flex-start;
   gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--vc-secondary-text-color);
+  cursor: pointer;
+  font: inherit;
   font-size: 13px;
   font-weight: 500;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
 
   & ha-icon {
     --mdc-icon-size: 18px;
@@ -366,7 +377,8 @@ ha-icon {
   gap: 6px;
 }
 
-.area {
+.area,
+.run-area {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -462,4 +474,21 @@ ha-icon {
 
 .vacuum-animation {
   margin: var(--vc-spacing) auto;
+}
+
+.area.preset:not(.selected) {
+  border-style: dashed;
+}
+
+.run {
+  border-top: 1px solid var(--vc-divider-color);
+  padding: var(--vc-spacing);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.run-area {
+  cursor: default;
 }

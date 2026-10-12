@@ -18,6 +18,8 @@ import buildConfig from './config';
 import {
   Template,
   VacuumCardAction,
+  VacuumCardAreaPreset,
+  VacuumCleaningRun,
   VacuumCardOption,
   VacuumCardConfig,
   VacuumEntity,
@@ -44,6 +46,44 @@ const OPTION_TIMEOUT = 15000;
 
 // VacuumEntityFeature.CLEAN_AREA in Home Assistant
 const FEATURE_CLEAN_AREA = 16384;
+
+const CLEANING_STATES = [
+  'on',
+  'auto',
+  'spot',
+  'edge',
+  'single_room',
+  'cleaning',
+];
+const ACTIVE_STATES = [...CLEANING_STATES, 'paused', 'returning'];
+
+// A run that never left the dock, sat docked this long or is this old is over
+const RUN_START_TIMEOUT = 2 * 60 * 1000;
+const RUN_IDLE_TIMEOUT = 10 * 60 * 1000;
+const RUN_MAX_AGE = 12 * 60 * 60 * 1000;
+
+const runStorageKey = (entityId: string) => `vacuum-card:run:${entityId}`;
+
+function readRun(entityId: string): VacuumCleaningRun | null {
+  try {
+    const run = JSON.parse(localStorage.getItem(runStorageKey(entityId)) ?? '');
+    return Array.isArray(run?.areas) ? run : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeRun(entityId: string, run: VacuumCleaningRun | null): void {
+  try {
+    if (run) {
+      localStorage.setItem(runStorageKey(entityId), JSON.stringify(run));
+    } else {
+      localStorage.removeItem(runStorageKey(entityId));
+    }
+  } catch {
+    // Storage can be blocked; the run is then only kept until a reload
+  }
+}
 
 console.info(
   `%c VACUUM-CARD %c ${PKG_VERSION}`,
@@ -78,7 +118,9 @@ export class VacuumCard extends LitElement {
     { from: string; to: string }
   > = {};
   @state() private areasExpanded = false;
+  @state() private run: VacuumCleaningRun | null = null;
   private areasLoadedFor: string | null = null;
+  private runLoadedFor: string | null = null;
 
   static get styles(): CSSResultGroup {
     return styles;
@@ -131,25 +173,85 @@ export class VacuumCard extends LitElement {
       return true;
     }
 
-    // Options and the map are separate entities, so the vacuum entity check
-    // misses them
+    // The card also reads other entities, which the vacuum entity check misses
     const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
     return (
       !!oldHass &&
-      [
-        this.config.map_entity,
-        ...this.config.options.flatMap(({ entity, visible_when }) => [
-          entity,
-          visible_when?.entity,
-        ]),
-      ].some(
-        (entityId) =>
-          !!entityId && oldHass.states[entityId] !== this.hass.states[entityId],
+      this.watchedEntityIds.some(
+        (entityId) => oldHass.states[entityId] !== this.hass.states[entityId],
       )
     );
   }
 
+  private get watchedEntityIds(): string[] {
+    const { battery_entity, map, map_entity, stats, options } = this.config;
+
+    return [
+      battery_entity,
+      map,
+      map_entity,
+      ...Object.values(stats)
+        .flat()
+        .map((stat) => stat?.entity_id),
+      ...options.flatMap(({ entity, visible_when }) => [
+        entity,
+        visible_when?.entity,
+      ]),
+    ].filter((entityId): entityId is string => !!entityId);
+  }
+
+  private get hassAreas(): Record<string, VacuumArea> {
+    return (
+      (this.hass as HomeAssistant & { areas?: Record<string, VacuumArea> })
+        .areas ?? {}
+    );
+  }
+
+  private setRun(run: VacuumCleaningRun | null): void {
+    this.run = run;
+    writeRun(this.config.entity, run);
+  }
+
+  // Follows the vacuum state to tell when the run started by this card is over
+  private syncRun(): void {
+    if (this.runLoadedFor !== this.config.entity) {
+      this.runLoadedFor = this.config.entity;
+      this.run = readRun(this.config.entity);
+    }
+
+    const run = this.run;
+    if (!run || !this.entity) {
+      return;
+    }
+
+    const now = Date.now();
+    const { state } = this.entity;
+
+    if (now - run.started > RUN_MAX_AGE) {
+      this.setRun(null);
+    } else if (ACTIVE_STATES.includes(state)) {
+      const neverStarted = !run.active && now - run.started > RUN_START_TIMEOUT;
+      const dockedTooLong =
+        run.idleSince !== undefined && now - run.idleSince > RUN_IDLE_TIMEOUT;
+
+      if (neverStarted || dockedTooLong) {
+        this.setRun(null);
+      } else if (!run.active || run.idleSince !== undefined) {
+        this.setRun({ areas: run.areas, started: run.started, active: true });
+      }
+    } else if (
+      run.active &&
+      run.idleSince === undefined &&
+      ['docked', 'idle'].includes(state)
+    ) {
+      // Docking can be a mid-run mop wash, so only note when it happened
+      this.setRun({ ...run, idleSince: now });
+    }
+  }
+
   protected willUpdate(): void {
+    this.syncRun();
+
     const settled = Object.entries(this.pendingOptions).filter(
       ([entityId, { from }]) => this.hass?.states[entityId]?.state !== from,
     );
@@ -387,6 +489,48 @@ export class VacuumCard extends LitElement {
     }
   }
 
+  // Presets from the config, limited to rooms that can be cleaned right now
+  get areaPresets(): { name: string; icon?: string; areaIds: string[] }[] {
+    const visible = this.visibleAreaIds;
+    const areas = this.hassAreas;
+    const resolve = (ref: string) => {
+      const name = String(ref).trim().toLowerCase();
+      return visible.find(
+        (id) => id === ref || areas[id]?.name.trim().toLowerCase() === name,
+      );
+    };
+
+    return this.config.area_presets
+      .map(({ name, icon, areas: refs }: VacuumCardAreaPreset) => ({
+        name,
+        icon,
+        areaIds: [
+          ...new Set(
+            (refs ?? []).map(resolve).filter((id): id is string => !!id),
+          ),
+        ],
+      }))
+      .filter(({ areaIds }) => areaIds.length > 0);
+  }
+
+  private isSelected(areaIds: string[]): boolean {
+    return (
+      areaIds.length === this.selectedAreaIds.length &&
+      areaIds.every((id) => this.selectedAreaIds.includes(id))
+    );
+  }
+
+  private togglePreset(areaIds: string[]): void {
+    this.selectedAreaIds = this.isSelected(areaIds) ? [] : [...areaIds];
+  }
+
+  private toggleFloor(areaIds: string[]): void {
+    const selected = this.selectedAreaIds;
+    this.selectedAreaIds = areaIds.every((id) => selected.includes(id))
+      ? selected.filter((id) => !areaIds.includes(id))
+      : [...selected, ...areaIds.filter((id) => !selected.includes(id))];
+  }
+
   private toggleArea(areaId: string): void {
     this.selectedAreaIds = this.selectedAreaIds.includes(areaId)
       ? this.selectedAreaIds.filter((id) => id !== areaId)
@@ -395,6 +539,7 @@ export class VacuumCard extends LitElement {
 
   private async handleStart(): Promise<void> {
     if (this.selectedAreaIds.length === 0) {
+      this.setRun(null);
       return this.handleVacuumAction('start')();
     }
 
@@ -403,6 +548,11 @@ export class VacuumCard extends LitElement {
       await this.hass.callService('vacuum', 'clean_area', {
         entity_id: this.config.entity,
         cleaning_area_id: this.selectedAreaIds,
+      });
+      this.setRun({
+        areas: this.selectedAreaIds,
+        started: Date.now(),
+        active: false,
       });
       this.selectedAreaIds = [];
     } catch {
@@ -830,6 +980,32 @@ export class VacuumCard extends LitElement {
           </div>
         `;
       }
+
+      case 'error': {
+        return html`
+          <div class="toolbar">
+            <ha-icon-button
+              label="${localize('common.locate')}"
+              @click="${this.handleVacuumAction('locate', { request: false })}"
+              ><ha-icon icon="mdi:map-marker"></ha-icon>
+            </ha-icon-button>
+            <paper-button
+              @click="${this.handleVacuumAction('resume', {
+                defaultService: 'start',
+                request: true,
+              })}"
+            >
+              <ha-icon icon="hass:play"></ha-icon>
+              ${localize('common.continue')}
+            </paper-button>
+            <paper-button @click="${this.handleVacuumAction('return_to_base')}">
+              <ha-icon icon="hass:home-map-marker"></ha-icon>
+              ${localize('common.return_to_base')}
+            </paper-button>
+          </div>
+        `;
+      }
+
       case 'docked':
       case 'idle':
       default: {
@@ -973,6 +1149,7 @@ export class VacuumCard extends LitElement {
 
     const options = this.visibleOptions;
     const sections = this.areaSections;
+    const presets = this.areaPresets;
     if (options.length === 0 && sections.length === 0) {
       return nothing;
     }
@@ -990,17 +1167,43 @@ export class VacuumCard extends LitElement {
               `
             : nothing
         }
+        ${
+          presets.length > 0 && sections.length > 0
+            ? html`
+                <div class="areas-list">
+                  ${presets.map(
+                    ({ name, icon, areaIds }) => html`
+                      <button
+                        class="area preset ${
+                          this.isSelected(areaIds) ? 'selected' : ''
+                        }"
+                        aria-pressed="${this.isSelected(areaIds)}"
+                        @click="${() => this.togglePreset(areaIds)}"
+                      >
+                        <ha-icon icon="${icon || 'mdi:star-outline'}"></ha-icon>
+                        <span class="area-name">${name}</span>
+                      </button>
+                    `,
+                  )}
+                </div>
+              `
+            : nothing
+        }
         ${sections.map(
           ({ floor, areas }) => html`
             ${
               showLabels
                 ? html`
-                    <div class="areas-floor">
+                    <button
+                      class="areas-floor"
+                      @click="${() =>
+                        this.toggleFloor(areas.map((area) => area.area_id))}"
+                    >
                       <ha-icon
                         icon="${floor?.icon || 'mdi:floor-plan'}"
                       ></ha-icon>
                       ${floor?.name ?? localize('common.other_areas')}
-                    </div>
+                    </button>
                   `
                 : nothing
             }
@@ -1031,15 +1234,40 @@ export class VacuumCard extends LitElement {
     `;
   }
 
+  // Rooms this card sent the vacuum to, shown while that run is in progress
+  private renderRun(state: VacuumEntityState): Template {
+    if (!this.run || ![...ACTIVE_STATES, 'error'].includes(state)) {
+      return nothing;
+    }
+
+    const areas = this.run.areas
+      .map((id) => this.hassAreas[id])
+      .filter((area) => !!area);
+    if (areas.length === 0) {
+      return nothing;
+    }
+
+    return html`
+      <div class="run">
+        ${areas.map(
+          (area) => html`
+            <span class="run-area">
+              <ha-icon icon="${area.icon || 'mdi:texture-box'}"></ha-icon>
+              <span class="area-name">${area.name}</span>
+            </span>
+          `,
+        )}
+      </div>
+    `;
+  }
+
   private renderUnavailable(): Template {
     return html`
       <ha-card>
         <div class="preview not-available">
           <div class="metadata">
-            <div class="not-available">
-              ${localize('common.not_available')}
-            </div>
-          <div>
+            <div class="not-available">${localize('common.not_available')}</div>
+          </div>
         </div>
       </ha-card>
     `;
@@ -1075,6 +1303,7 @@ export class VacuumCard extends LitElement {
           ${this.renderStats(this.entity.state)}
         </div>
 
+        ${this.renderRun(this.entity.state)}
         ${this.renderAreas(this.entity.state)}
         ${this.renderToolbar(this.entity.state)}
       </ha-card>

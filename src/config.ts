@@ -35,5 +35,6 @@ export default function buildConfig(
     actions: config.actions ?? {},
     shortcuts: config.shortcuts ?? [],
     options: config.options ?? [],
+    area_presets: config.area_presets ?? [],
   };
 }
